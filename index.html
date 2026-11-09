@@ -215,6 +215,8 @@ img{max-width:100%}
 }
 /* le logo HCL est un carré plein : moins de marge pour qu'il ait le même poids visuel */
 .partners img[src*="HCL"]{padding:6px;flex-shrink:0}
+/* Lyon 1 : le PNG a déjà de larges marges blanches, on n'en rajoute pas */
+.partners img[src*="CLAUDE_BERNAR"]{padding:0 4px;flex-shrink:0}
 .partners img:hover{--ly:-6px;--ls:1.08;
   box-shadow:0 22px 40px rgba(2,10,26,.55), 0 0 0 3px rgba(143,240,212,.55)}
 /* les voisins s'effacent légèrement : le logo survolé ressort */
@@ -573,7 +575,7 @@ body.sortie{animation:sortie .45s var(--ease) forwards}
     <div class="hero-txt">
       <div class="partners">
         <img src="LOGO_INSTITUS/CEntrelb.png" alt="Centre Léon Bérard" onerror="this.style.display='none'">
-        <img src="LOGO_INSTITUS/lyon1.png" alt="Lyon 1" onerror="this.style.display='none'">
+        <img src="LOGO_INSTITUS/CLAUDE_BERNAR_LYON1.png" alt="Université Claude Bernard Lyon 1" onerror="this.style.display='none'">
         <img src="LOGO_INSTITUS/shapemed.png" alt="SHAPE-Med Lyon" onerror="this.style.display='none'">
         <img src="LOGO_INSTITUS/LOGO_HCL.png" alt="Hospices Civils de Lyon" onerror="this.style.display='none'">
       </div>
