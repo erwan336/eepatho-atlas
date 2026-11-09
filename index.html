@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>EEPATHO — Portail Géo-Santé</title>
+<meta name="description" content="EEPATHO — exposition territoriale et caractéristiques socio-économiques des patients atteints de maladies chroniques du foie. Atlas communal, France métropolitaine, 2017-2024.">
+
+<!-- Google Fonts : le repli system-ui est déclaré dans --font-d / --font-b.
+     Si le réseau hospitalier bloque fonts.googleapis.com, la page reste
+     entièrement lisible et la mise en page ne bouge pas (métriques proches). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+<!-- Entrée animée GSAP : on masque le texte du hero le temps que GSAP arrive
+     (chargé en bas de page). Filet de sécurité : au bout de 2 s, tout réapparaît
+     même si le CDN est bloqué, et l'intro est alors abandonnée. -->
+<script>
+(function(){try{
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  var r=document.documentElement; r.classList.add("gs-attente");
+  setTimeout(function(){ if(r.classList.contains("gs-attente")){ window.__gsTrop=true; r.classList.remove("gs-attente"); } },2000);
+}catch(e){}})();
+</script>
+
+<style>
+/* =====================================================================
+   EEPATHO — page d'accueil
+   Un seul fichier. Requêtes réseau externes : la police Google et GSAP
+   (jsDelivr, animations d'entrée) — tous deux optionnels, la page reste
+   complète et fonctionnelle s'ils sont bloqués.
+
+   Parti pris de performance : AUCUNE animation permanente coûteuse.
+   - pas de canvas en boucle ;
+   - le grain et la trame sont des fonds statiques (peints une fois) ;
+   - les seules animations qui tournent en continu portent sur ~20 points
+     d'accent (opacité seule) et un halo (opacité + transform, sans filtre) ;
+   - tout le reste est déclenché une fois, à l'entrée dans le viewport.
+   ===================================================================== */
+
+:root{
+  /* --- encres & surfaces claires --- */
+  --ink:#0e1b27;          /* 15.8:1 sur --panel */
+  --ink-2:#2d3f54;        /*  9.4:1 sur --panel */
+  --muted:#566a82;        /*  4.9:1 sur --bg — AA texte normal */
+  --bg:#f2f6fb;
+  --panel:#ffffff;
+  --line:#e3ebf4;
+
+  /* --- couleurs d'identité --- */
+  --accent:#1f6feb;
+  --accent-deep:#1857c0;  /* 5.6:1 sur blanc */
+  --sante:#ff7eb3;
+  --sante-deep:#b8336a;
+  --mint:#8ff0d4;         /* accent clair sur fond profond */
+  --mint-deep:#0e8a6d;
+
+  /* --- fond profond du hero --- */
+  --deep-1:#041a18;
+  --deep-2:#083b33;
+  --deep-3:#0b5648;
+
+  /* --- typographie ---
+     Space Grotesk (titres) + IBM Plex Sans (texte) : une paire dessinée pour
+     la documentation technique, cohérente avec l'identité « instrument
+     scientifique » du portail. IBM Plex Mono habille les lectures chiffrées
+     (KPI, mentions techniques) comme sur un relevé de mesure. */
+  --font-d:"Space Grotesk","IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-b:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-m:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+
+  /* --- rythme vertical --- */
+  --gouttiere:clamp(20px,4vw,40px);
+  --large:1280px;
+
+  /* --- grain : SVG en data-URI, donc aucune requête réseau --- */
+  --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.42'/%3E%3C/svg%3E");
+
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;font-family:var(--font-b);color:var(--ink);background-color:var(--bg);
+  /* trame « papier millimétré » très légère : rappelle l'instrument de mesure
+     sans jamais concurrencer le contenu (peinte une fois, aucun coût JS). */
+  background-image:radial-gradient(rgba(14,27,39,.06) 1px, transparent 1.4px);
+  background-size:24px 24px;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+img{max-width:100%}
+::selection{background:var(--sante);color:#1a0810}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px;border:2.5px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:#c3d2e2}
+
+/* Le focus clavier doit rester visible partout : c'est la seule façon de
+   naviguer la page sans souris, et le portillon est un formulaire. */
+:focus-visible{outline:3px solid var(--mint);outline-offset:3px;border-radius:6px}
+.sur-fond-clair :focus-visible{outline-color:var(--accent)}
+
+.saut{position:absolute;left:-9999px;top:0;z-index:99;padding:12px 18px;
+  background:#fff;color:var(--accent-deep);font-weight:600;border-radius:0 0 10px 0}
+.saut:focus{left:0}
+
+/* =====================================================================
+   AMBIANCE LATÉRALE — images d'ambiance dans les marges des grands écrans.
+   Fondu enchaîné en opacité seule (le compositeur s'en charge, aucun
+   repaint). L'ancien zoom permanent a été retiré : il forçait une
+   rastérisation continue d'une image plein écran pour un effet invisible.
+   ===================================================================== */
+.ambiance{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;contain:strict}
+.ambiance .cote{position:absolute;top:0;bottom:0;width:min(430px,30vw)}
+.ambiance .cote.g{left:0;
+  -webkit-mask-image:linear-gradient(90deg,#000 0%,rgba(0,0,0,.5) 42%,transparent 78%);
+          mask-image:linear-gradient(90deg,#000 0%,rgba(0,0,0,.5) 42%,transparent 78%)}
+.ambiance .cote.d{right:0;
+  -webkit-mask-image:linear-gradient(270deg,#000 0%,rgba(0,0,0,.5) 42%,transparent 78%);
+          mask-image:linear-gradient(270deg,#000 0%,rgba(0,0,0,.5) 42%,transparent 78%)}
+.ambiance .vue{position:absolute;inset:0;background-size:cover;background-position:center;
+  opacity:0;transition:opacity 1.8s ease;will-change:opacity}
+.ambiance .vue.on{opacity:.13}
+@media (max-width:1100px){.ambiance{display:none}}
+
+/* =====================================================================
+   HERO
+   ===================================================================== */
+.hero{
+  position:relative;z-index:1;color:#fff;overflow:hidden;isolation:isolate;
+  background:
+    radial-gradient(1200px 640px at 76% 14%, rgba(255,190,90,.17), transparent 58%),
+    radial-gradient(980px 600px at 84% 34%, rgba(30,190,158,.26), transparent 62%),
+    radial-gradient(820px 520px at 8% 88%, rgba(255,126,179,.20), transparent 56%),
+    linear-gradient(152deg, var(--deep-1) 0%, var(--deep-2) 54%, var(--deep-3) 100%);
+  padding-bottom:clamp(96px,12vw,140px);
+}
+/* trame de points + grain : deux fonds statiques superposés, peints une seule fois */
+.hero::after{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:3;
+  background-image:
+    var(--grain),
+    radial-gradient(rgba(255,255,255,.055) 1px, transparent 1.4px);
+  background-size:180px 180px, 26px 26px;
+  opacity:.5;mix-blend-mode:overlay;
+}
+/* liseré d'identité en haut de page */
+.hero::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:3px;z-index:4;
+  background:linear-gradient(90deg,var(--mint-deep),var(--accent),var(--sante-deep),#d97706);
+}
+
+/* --- foie en fond : image fixe + halo lent + plongée 3D au scroll ---
+   perspective posée ici (et non sur .hero) pour que la 3D ne s'applique
+   qu'à ce calque, sans toucher les logos/texte du hero. */
+.foiewrap{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;perspective:1400px}
+.foiewrap .halo{
+  position:absolute;left:68%;top:44%;width:min(720px,64vw);height:min(720px,64vw);
+  transform:translate(-50%,-50%);border-radius:50%;
+  background:radial-gradient(circle at 50% 50%,
+    rgba(255,150,70,.22),rgba(255,90,120,.12) 42%,rgba(31,111,235,.06) 62%,transparent 73%);
+  /* filter:blur() retiré : le dégradé est déjà doux, et le flou obligeait le
+     navigateur à re-rastériser un disque de 720px à chaque image. */
+  animation:halo 9s ease-in-out infinite;
+  will-change:opacity,transform;
+}
+
+.foiewrap .foie{
+  position:absolute;left:68%;top:44%;transform:translate(-50%,-50%);
+  /* opacité volontairement basse : le foie est un motif de fond, la silhouette
+     de la France est le sujet. Plus haut, ses masses vertes rivalisent avec les
+     points et la carte cesse de se lire. */
+  width:min(760px,66vw);height:auto;opacity:.16;
+  filter:saturate(.9) contrast(1.02);
+  -webkit-mask-image:radial-gradient(ellipse 58% 58% at 50% 50%,#000 48%,transparent 78%);
+          mask-image:radial-gradient(ellipse 58% 58% at 50% 50%,#000 48%,transparent 78%);
+  will-change:transform,opacity;
+}
+@keyframes halo{
+  0%,100%{opacity:.55;transform:translate(-50%,-50%) scale(1)}
+  50%    {opacity:.9; transform:translate(-50%,-50%) scale(1.045)}
+}
+
+.hero-in{
+  position:relative;z-index:2;max-width:var(--large);margin:0 auto;
+  display:grid;grid-template-columns:1.02fr .98fr;align-items:center;
+  gap:clamp(28px,4vw,52px);
+  padding:clamp(40px,5vw,68px) var(--gouttiere) 12px;
+  min-height:min(900px,92svh);
+}
+@media (max-width:980px){
+  .hero-in{grid-template-columns:1fr;min-height:0;padding-top:36px}
+}
+
+/* --- logos partenaires --- */
+/* une seule ligne : les logos se partagent la largeur de la colonne
+   (flex-shrink + object-fit:contain les réduisent sans les déformer) */
+.partners{display:flex;gap:12px;flex-wrap:nowrap;align-items:center;margin-bottom:30px;perspective:700px}
+.partners img{flex:0 1 auto;min-width:0}
+/* La transformation passe par des variables : le survol (--ly, --ls) et
+   l'inclinaison qui suit le pointeur (--rx, --ry, posées par le script) se
+   combinent au lieu de s'écraser ; la transition longue les rend fluides. */
+.partners img{
+  --ly:0px;--ls:1;--rx:0deg;--ry:0deg;
+  height:clamp(58px,5.6vw,80px);width:auto;max-width:200px;object-fit:contain;
+  background:#fff;border-radius:16px;padding:10px 14px;
+  box-shadow:0 8px 22px rgba(2,10,26,.38);
+  transform:translateY(var(--ly)) scale(var(--ls)) rotateX(var(--rx)) rotateY(var(--ry));
+  transition:transform .55s cubic-bezier(.2,.9,.25,1.15), box-shadow .45s var(--ease), opacity .35s ease, filter .35s ease;
+  will-change:transform;
+}
+/* le logo HCL est un carré plein : moins de marge pour qu'il ait le même poids visuel */
+.partners img[src*="HCL"]{padding:6px;flex-shrink:0}
+.partners img:hover{--ly:-6px;--ls:1.08;
+  box-shadow:0 22px 40px rgba(2,10,26,.55), 0 0 0 3px rgba(143,240,212,.55)}
+/* les voisins s'effacent légèrement : le logo survolé ressort */
+.partners:hover img:not(:hover){opacity:.72;filter:saturate(.7)}
+@media (max-width:560px){.partners{gap:8px}.partners img{height:52px;padding:6px 8px;border-radius:12px}}
+
+/* attente de l'intro GSAP (voir script dans <head>) */
+.gs-attente .hero-txt>*, .gs-attente .maplegend{visibility:hidden}
+/* SplitText : évite le décalage de crénage pendant l'animation des mots */
+.gs-split{font-kerning:none}
+
+.eyebrow{
+  display:inline-flex;align-items:center;gap:9px;flex-wrap:wrap;
+  font-family:var(--font-m);font-size:10.5px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--mint);margin-bottom:16px;
+}
+.eyebrow .dot{color:var(--sante);font-size:14px;line-height:0}
+
+h1{
+  font-family:var(--font-d);font-weight:700;letter-spacing:-.035em;line-height:.94;
+  margin:0 0 10px;font-size:clamp(56px,7.4vw,104px);
+  background:linear-gradient(112deg,#ffffff 26%,var(--mint) 68%,#5ec7ab);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  /* repli si background-clip:text n'est pas honoré */
+  color:#fff;
+}
+.h1-sub{
+  font-family:var(--font-d);font-size:clamp(19px,2.2vw,27px);font-weight:600;
+  color:rgba(255,255,255,.88);letter-spacing:0;margin:0 0 24px;
+}
+.mission{
+  font-size:16.5px;line-height:1.72;color:rgba(255,255,255,.87);max-width:56ch;margin:0 0 30px;
+  border-left:3px solid var(--sante);padding-left:18px;
+}
+.mission b{color:#fff;font-weight:600}
+
+/* --- panneau de connexion --- */
+.login{
+  max-width:410px;border-radius:22px;padding:26px 26px 22px;
+  background:rgba(255,255,255,.09);
+  border:1px solid rgba(255,255,255,.24);
+  backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);
+  box-shadow:0 24px 60px rgba(2,10,26,.5), inset 0 1px 0 rgba(255,255,255,.16);
+}
+.login .t{font-family:var(--font-d);font-weight:700;font-size:16.5px;color:#fff;margin-bottom:4px;
+  display:flex;align-items:center;gap:8px}
+.login .t svg{flex:none;opacity:.9}
+.login .s{font-size:12.5px;color:rgba(255,255,255,.74);margin-bottom:16px;line-height:1.5}
+.login input{
+  width:100%;padding:14px 15px;font-family:var(--font-b);font-size:14px;
+  color:#fff;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.3);
+  border-radius:13px;outline:none;
+  transition:border-color .18s, background .18s, box-shadow .18s;
+}
+.login input::placeholder{color:rgba(255,255,255,.6)}
+.login input:focus{border-color:var(--mint);background:rgba(255,255,255,.17);
+  box-shadow:0 0 0 3px rgba(143,240,212,.22)}
+.login button{
+  width:100%;margin-top:12px;padding:14px;border:none;border-radius:13px;
+  font-family:var(--font-d);font-size:14.5px;font-weight:600;color:#fff;cursor:pointer;
+  background:linear-gradient(135deg,var(--mint-deep),var(--sante-deep));
+  box-shadow:0 10px 30px rgba(14,138,109,.42);
+  transition:transform .07s, box-shadow .22s, filter .22s;
+}
+.login button:hover{box-shadow:0 14px 38px rgba(184,51,106,.58);filter:brightness(1.07)}
+.login button:active{transform:translateY(1px)}
+.login .err{
+  display:none;margin-top:11px;font-size:12.5px;color:#ffc2cf;font-weight:500;
+  align-items:center;gap:7px;
+}
+.login .err.show{display:flex;animation:secousse .34s ease}
+/* Bascule silencieuse vers la vraie adresse de l'application (script en bas de
+   page) : remplace le panneau de connexion le temps du basculement. */
+.attente{display:flex;align-items:center;gap:11px;color:#fff;
+  font-family:var(--font-d);font-weight:600;font-size:15px}
+.attente .rond{width:16px;height:16px;flex:none;border-radius:50%;
+  border:2.5px solid rgba(255,255,255,.28);border-top-color:var(--mint);
+  animation:tourne .8s linear infinite}
+@keyframes tourne{to{transform:rotate(360deg)}}
+@keyframes secousse{
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-5px)} 75%{transform:translateX(5px)}
+}
+/* --- France en points --- */
+.mapwrap{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center}
+/* voile sombre localisé : détache la silhouette de la France du foie */
+.mapwrap::before{
+  content:"";position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);
+  width:112%;height:116%;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 52% 54% at 50% 50%,
+    rgba(3,12,30,.58), rgba(3,12,30,.26) 46%, transparent 72%);
+}
+.mapfig{position:relative;z-index:1;width:min(100%,580px);margin:0}
+.mapfig svg{display:block;width:100%;height:auto;overflow:visible;
+  filter:drop-shadow(0 1px 3px rgba(2,10,26,.8)) drop-shadow(0 0 24px rgba(127,168,255,.42))}
+
+/* équerres d'angle : détail cartographique institutionnel, pur CSS */
+.mapfig .equerre{position:absolute;width:26px;height:26px;z-index:2;pointer-events:none;
+  border:1.5px solid rgba(143,240,212,.5);opacity:0;animation:equerre .6s 1.6s var(--ease) forwards}
+.mapfig .equerre.ht{top:-10px;left:-10px;border-right:0;border-bottom:0}
+.mapfig .equerre.hd{top:-10px;right:-10px;border-left:0;border-bottom:0}
+.mapfig .equerre.bt{bottom:-10px;left:-10px;border-right:0;border-top:0}
+.mapfig .equerre.bd{bottom:-10px;right:-10px;border-left:0;border-top:0}
+@keyframes equerre{to{opacity:1}}
+
+.frfill{fill:rgba(150,190,245,.07);stroke:none}
+.frbord{fill:none;stroke:#dcf0ff;stroke-width:1.4;stroke-linejoin:round;stroke-linecap:round;
+  filter:drop-shadow(0 0 5px rgba(150,200,255,.7));
+  stroke-dasharray:1;stroke-dashoffset:1;animation:traceFr 3s ease forwards}
+@keyframes traceFr{to{stroke-dashoffset:0}}
+
+/* Les points : apparition en cascade (signature du projet).
+   Le « respire » infini qui tournait sur les 345 points a été retiré —
+   345 animations d'opacité simultanées, en permanence, pour un effet
+   quasi invisible. Seuls les ~20 points d'accent pulsent désormais. */
+.pt{fill:#dce9ff;opacity:0;animation:apparait .55s var(--ease) forwards}
+.pt.s{fill:var(--sante);animation:apparait .55s var(--ease) forwards, pulse 4.5s ease-in-out infinite}
+.pt.m{fill:rgba(255,255,255,.82)}
+@keyframes apparait{from{opacity:0;transform:scale(.2)}to{opacity:1;transform:scale(1)}}
+@keyframes pulse{0%,100%{opacity:.7}50%{opacity:1}}
+
+.maplegend{position:relative;z-index:1;margin-top:18px;text-align:center;
+  font-size:11.5px;color:rgba(255,255,255,.75);line-height:1.5;max-width:46ch}
+.maplegend b{font-family:var(--font-m);color:var(--mint);font-weight:600;
+  background:rgba(143,240,212,.12);border:1px solid rgba(143,240,212,.3);
+  padding:2px 8px;border-radius:6px;letter-spacing:.02em}
+
+/* =====================================================================
+   BANDEAU DE CHIFFRES (chevauche le hero)
+   ===================================================================== */
+.kpiband{
+  max-width:var(--large);margin:clamp(-96px,-8vw,-70px) auto 0;position:relative;z-index:5;
+  padding:0 var(--gouttiere);display:grid;grid-template-columns:repeat(4,1fr);gap:16px;
+}
+@media (max-width:860px){.kpiband{grid-template-columns:repeat(2,1fr)}}
+.kpi{
+  background:var(--panel);border-radius:18px;padding:24px 22px 19px;
+  box-shadow:0 20px 48px rgba(8,26,54,.15);border:1px solid var(--line);
+  position:relative;overflow:hidden;
+  opacity:0;transform:translateY(20px);
+  transition:opacity .55s var(--ease), transform .55s var(--ease),
+             box-shadow .24s ease;
+}
+.kpi.in{opacity:1;transform:translateY(0)}
+.kpi:hover{box-shadow:0 30px 62px rgba(8,26,54,.22)}
+.kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
+  background:linear-gradient(var(--accent),var(--sante-deep))}
+.kpi .v{font-family:var(--font-m);font-size:clamp(26px,3.2vw,34px);font-weight:600;
+  color:var(--ink);line-height:1.04;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;
+  margin-top:5px;font-weight:600}
+
+/* =====================================================================
+   CARROUSEL « CE QUE PERMET L'ATLAS »
+   Défilement natif (scroll-snap) : le glisser au doigt/trackpad marche sans
+   JS ; le JS ajoute boutons, points, clavier et rotation douce (en pause au
+   focus clavier, onglet masqué, hors écran, ou si mouvement réduit).
+   ===================================================================== */
+.carou-sec{padding-bottom:0}
+.carou{position:relative;margin-top:30px}
+.carou-piste{
+  display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;
+  border-radius:24px;scrollbar-width:none;overscroll-behavior-x:contain;
+  box-shadow:0 26px 60px -18px rgba(8,26,54,.42);
+}
+.carou-piste::-webkit-scrollbar{display:none}
+.diapo{
+  flex:0 0 100%;scroll-snap-align:start;position:relative;overflow:hidden;isolation:isolate;
+  display:grid;grid-template-columns:1fr 1.05fr;min-height:340px;color:#fff;
+  background:
+    radial-gradient(700px 380px at 92% 10%, rgba(30,190,158,.28), transparent 62%),
+    radial-gradient(520px 340px at 60% 110%, rgba(255,126,179,.18), transparent 60%),
+    linear-gradient(140deg,var(--deep-1),var(--deep-2) 60%,var(--deep-3));
+}
+.diapo::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background-image:radial-gradient(rgba(255,255,255,.06) 1px,transparent 1.4px);background-size:22px 22px}
+/* visuels : illustrations SVG dessinées pour chaque fonction (pas de photo) */
+.diapo .visuel{position:relative;display:grid;place-items:center;padding:26px 10px 26px 30px;
+  background:radial-gradient(70% 70% at 45% 50%,rgba(143,240,212,.10),transparent 70%);
+  transform:scale(.96);opacity:.6;transition:transform 1.1s var(--ease),opacity .8s ease}
+.diapo.active .visuel{transform:scale(1);opacity:1}
+.diapo .visuel svg{width:100%;max-width:420px;height:auto;overflow:visible;
+  filter:drop-shadow(0 10px 26px rgba(0,0,0,.35))}
+.ill-txt{font-family:var(--font-m);fill:rgba(255,255,255,.78);font-size:11px}
+.ill-txt.b{fill:#fff;font-weight:600}
+.ill-txt.m{fill:var(--mint)}
+.ill-ui{font-family:var(--font-b);fill:rgba(255,255,255,.9);font-size:12px}
+.diapo .texte{padding:clamp(28px,4vw,48px) clamp(24px,4vw,52px) 64px;display:flex;flex-direction:column;justify-content:center}
+.diapo .num{font-family:var(--font-m);font-size:11.5px;letter-spacing:.12em;color:var(--mint);margin-bottom:12px}
+.diapo .num b{color:#fff;font-weight:600}
+.diapo h3{font-family:var(--font-d);font-weight:700;font-size:clamp(24px,2.8vw,32px);letter-spacing:-.02em;
+  margin:0 0 12px;line-height:1.1}
+.diapo p{margin:0 0 18px;font-size:15px;line-height:1.68;color:rgba(255,255,255,.86);max-width:52ch}
+.diapo .tags{display:flex;flex-wrap:wrap;gap:7px}
+.diapo .tags span{font-family:var(--font-m);font-size:11px;padding:5px 10px;border-radius:999px;
+  background:rgba(143,240,212,.1);border:1px solid rgba(143,240,212,.32);color:var(--mint)}
+/* entrée du texte de la diapositive active (une passe) */
+.diapo .texte>*{opacity:0;transform:translateY(14px);transition:opacity .6s var(--ease),transform .6s var(--ease)}
+.diapo.active .texte>*{opacity:1;transform:none}
+.diapo.active .texte>*:nth-child(2){transition-delay:.08s}
+.diapo.active .texte>*:nth-child(3){transition-delay:.16s}
+.diapo.active .texte>*:nth-child(4){transition-delay:.24s}
+@media (max-width:760px){
+  .diapo{grid-template-columns:1fr}
+  .diapo .visuel{padding:22px 22px 0}
+  .diapo .visuel svg{max-width:340px}
+  .diapo .texte{padding-top:6px}
+}
+
+/* commandes, posées sur le bas de la diapositive */
+.carou-cmd{position:absolute;left:clamp(24px,4vw,52px);right:clamp(16px,3vw,28px);bottom:16px;
+  display:flex;align-items:center;gap:10px;z-index:2;pointer-events:none}
+@media (min-width:761px){.carou-cmd{left:calc(48.8% + clamp(24px,4vw,52px))}}
+.carou-cmd>*{pointer-events:auto}
+.points{display:flex;gap:4px;margin-right:auto}
+.points button{width:44px;height:44px;border:0;background:none;padding:0;cursor:pointer;display:grid;place-items:center}
+.points button i{display:block;width:22px;height:4px;border-radius:3px;background:rgba(255,255,255,.28);position:relative;overflow:hidden;
+  transition:width .35s var(--ease),background .25s}
+.points button[aria-current="true"] i{width:40px;background:rgba(255,255,255,.22)}
+/* jauge de rotation : une passe par diapositive, pas de boucle */
+.points button[aria-current="true"] i::after{content:"";position:absolute;inset:0;background:var(--mint);
+  transform-origin:left;transform:scaleX(1)}
+.carou.rotation .points button[aria-current="true"] i::after{animation:jauge var(--duree,7s) linear forwards}
+.carou.pause .points button[aria-current="true"] i::after{animation-play-state:paused}
+@keyframes jauge{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.carou-cmd .fl{width:44px;height:44px;border-radius:50%;cursor:pointer;display:grid;place-items:center;
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.28);color:#fff;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:background .2s,transform .2s var(--ease)}
+.carou-cmd .fl:hover{background:rgba(255,255,255,.2);transform:translateY(-2px)}
+.carou-cmd .fl svg{width:16px;height:16px}
+
+/* =====================================================================
+   SECTION FAMILLES
+   ===================================================================== */
+.section{position:relative;z-index:1;max-width:var(--large);margin:0 auto;
+  padding:clamp(56px,7vw,84px) var(--gouttiere) clamp(60px,7vw,88px)}
+.kicker{font-family:var(--font-m);font-size:11.5px;font-weight:500;letter-spacing:.05em;
+  color:var(--accent-deep);display:inline-flex;align-items:center;gap:8px;margin-bottom:10px}
+.kicker::before{content:"§";color:var(--sante-deep);font-weight:600}
+.section h2{font-family:var(--font-d);font-size:clamp(26px,3.2vw,34px);font-weight:700;
+  letter-spacing:-.02em;margin:0 0 14px}
+.barre{display:block;width:56px;height:4px;margin:12px 0 0;border-radius:3px;
+  background:linear-gradient(90deg,var(--accent),var(--sante-deep));
+  transform:scaleX(0);transform-origin:left;transition:transform .7s .1s var(--ease)}
+.section.in .barre{transform:scaleX(1)}
+.section .sub{font-size:14.5px;color:var(--muted);margin:18px 0 34px;max-width:70ch;line-height:1.65}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px}
+.grp{
+  --c:#1f6feb;--c-rgb:31,111,235;
+  position:relative;border-radius:20px;padding:24px 22px 20px;overflow:hidden;
+  border:1px solid var(--line);background:var(--panel);
+  box-shadow:0 10px 30px rgba(8,26,54,.08);
+  opacity:0;transform:translateY(24px);
+  transition:opacity .55s var(--ease), transform .55s var(--ease), box-shadow .3s ease;
+}
+.grp.in{opacity:1;transform:translateY(0)}
+.grp:hover{transform:translateY(-6px);
+  box-shadow:0 30px 60px -14px rgba(var(--c-rgb),.45)}
+.grp:hover .bgimg{transform:scale(1.06)}
+.grp:hover .voile{background:linear-gradient(rgba(255,255,255,.79),rgba(255,255,255,.7))}
+.grp:hover .liseret{box-shadow:0 0 18px 1px var(--c)}
+.grp:hover h3 .ic{box-shadow:0 0 0 4px rgba(255,255,255,.65),0 0 14px 2px var(--c)}
+/* reflet qui balaie la carte au survol (une passe, pas une boucle) */
+.grp::after{content:"";position:absolute;top:0;left:-70%;width:55%;height:100%;z-index:4;
+  pointer-events:none;opacity:0;transform:skewX(-18deg);
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.45),transparent)}
+.grp:hover::after{animation:reflet .9s ease}
+@keyframes reflet{0%{left:-70%;opacity:0}18%{opacity:1}100%{left:135%;opacity:0}}
+
+.bgimg{position:absolute;inset:0;background-size:cover;background-position:center;
+  transition:transform .65s var(--ease);z-index:0}
+.voile{position:absolute;inset:0;z-index:1;
+  background:linear-gradient(rgba(255,255,255,.88),rgba(255,255,255,.81));
+  transition:background .3s ease}
+.grp>.contenu{position:relative;z-index:2}
+.grp .liseret{position:absolute;left:0;top:0;bottom:0;width:5px;z-index:3;
+  border-radius:20px 0 0 20px;transition:box-shadow .3s ease}
+.grp h3{font-family:var(--font-d);font-size:17.5px;font-weight:700;margin:0 0 4px;
+  display:flex;align-items:center;gap:9px;color:var(--ink)}
+.grp h3 .ic{width:11px;height:11px;border-radius:4px;flex:none;
+  box-shadow:0 0 0 4px rgba(255,255,255,.65);transition:box-shadow .3s ease}
+.grp .n{font-size:11.5px;color:var(--ink-2);margin-bottom:14px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.06em}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{font-size:12.5px;padding:6px 12px;border-radius:999px;
+  background:rgba(255,255,255,.9);color:var(--accent-deep);font-weight:500;
+  border:1px solid rgba(31,111,235,.2);
+  box-shadow:0 2px 8px rgba(8,26,54,.06);
+  opacity:0;transform:scale(.94);
+  transition:opacity .4s ease, transform .4s ease, border-color .15s, background .15s, color .15s}
+.grp.in .chip{opacity:1;transform:scale(1)}
+.chip:hover{border-color:var(--c);color:var(--c);background:#fff;transform:translateY(-1px)}
+
+/* =====================================================================
+   PIED DE PAGE
+   ===================================================================== */
+.foot{position:relative;z-index:1;max-width:var(--large);margin:0 auto;
+  padding:0 var(--gouttiere) 48px;font-size:11.5px;color:var(--muted);line-height:1.7}
+.foot .sep{display:block;height:1px;margin-bottom:26px;
+  background:linear-gradient(90deg,var(--line),transparent)}
+.foot-in{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap}
+.foot-brand{font-family:var(--font-d);font-weight:700;font-size:14px;color:var(--ink-2);
+  letter-spacing:-.01em;display:flex;align-items:baseline;gap:9px}
+.foot-brand .pt{width:7px;height:7px;border-radius:2px;flex:none;
+  background:linear-gradient(135deg,var(--accent),var(--sante-deep))}
+.foot-brand span{font-family:var(--font-m);font-weight:500;font-size:10.5px;
+  color:var(--muted);letter-spacing:.03em;text-transform:none}
+.foot-meta{font-family:var(--font-m);max-width:52ch;text-align:right}
+@media (max-width:700px){.foot-in{flex-direction:column;align-items:flex-start}.foot-meta{text-align:left}}
+
+/* =====================================================================
+   TRANSITION DE SORTIE (durée calée sur le setTimeout de 430 ms)
+   ===================================================================== */
+body.sortie{animation:sortie .45s var(--ease) forwards}
+@keyframes sortie{to{opacity:0;transform:scale(1.012)}}
+
+/* =====================================================================
+   MOUVEMENT RÉDUIT — on coupe tout, on montre l'état final
+   ===================================================================== */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{
+    animation-duration:.001ms !important;animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .pt{opacity:.9;transform:none}
+  .frbord{stroke-dashoffset:0}
+  .mapfig .equerre{opacity:1}
+  .grp,.chip,.kpi{opacity:1 !important;transform:none !important}
+  .barre{transform:scaleX(1) !important}
+  .ambiance .vue.on{opacity:.09}
+  .foiewrap .halo{opacity:.7}
+}
+</style>
+</head>
+<body>
+
+<a class="saut" href="#contenu">Aller au contenu principal</a>
+
+<!-- Ambiance discrète dans les marges des grands écrans -->
+<div class="ambiance" aria-hidden="true">
+  <div class="cote g"></div>
+  <div class="cote d"></div>
+</div>
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="foiewrap" aria-hidden="true">
+    <div class="halo"></div>
+    <img class="foie" src="LOGO_ACCEUIL_OPT/foie.jpg" alt="" loading="eager" decoding="async"
+         onerror="this.onerror=null;this.src='LOGO_ACCEUIL/foie.jpg'">
+  </div>
+
+  <div class="hero-in">
+    <div class="hero-txt">
+      <div class="partners">
+        <img src="LOGO_INSTITUS/CEntrelb.png" alt="Centre Léon Bérard" onerror="this.style.display='none'">
+        <img src="LOGO_INSTITUS/lyon1.png" alt="Lyon 1" onerror="this.style.display='none'">
+        <img src="LOGO_INSTITUS/shapemed.png" alt="SHAPE-Med Lyon" onerror="this.style.display='none'">
+        <img src="LOGO_INSTITUS/LOGO_HCL.png" alt="Hospices Civils de Lyon" onerror="this.style.display='none'">
+      </div>
+
+      <div class="eyebrow">Centre Léon Bérard <span class="dot">●</span> SHAPE-Med Lyon <span class="dot">●</span> Équipe Géo-Santé</div>
+      <h1>EEPATHO</h1>
+      <div class="h1-sub">Visualisation des variables du projet</div>
+      <p class="mission">
+        Exposition territoriale et caractéristiques socio-économiques des patients atteints de
+        <b>maladies chroniques du foie</b> pouvant évoluer vers le carcinome hépatocellulaire.
+        <b>France métropolitaine</b>, échelle communale × année, <b>2017-2024</b>.
+      </p>
+
+      <div class="login">
+        <div class="t">Version publique</div>
+        <div class="s">Données publiques uniquement (INSEE, ARS, Ineris, IRSN…). Les données patients EEPATHO ne sont pas en ligne.</div>
+        <button id="entrer" type="button" onclick="document.body.classList.add('sortie');setTimeout(function(){location.href='atlas.html'},430)">Ouvrir l'atlas</button>
+      </div>
+    </div>
+
+    <div class="mapwrap">
+      <figure class="mapfig">
+        <span class="equerre ht" aria-hidden="true"></span>
+        <span class="equerre hd" aria-hidden="true"></span>
+        <span class="equerre bt" aria-hidden="true"></span>
+        <span class="equerre bd" aria-hidden="true"></span>
+        <svg id="france" viewBox="0 0 620 620" xmlns="http://www.w3.org/2000/svg"
+             role="img" aria-label="Silhouette de la France métropolitaine et de la Corse, composée de 345 points, chacun étant le centroïde d'une commune témoin du projet"></svg>
+      </figure>
+      <div class="maplegend">
+        <b>Version 1</b> de l'application — mise à jour et actualisation des données possibles
+      </div>
+    </div>
+  </div>
+</header>
+
+<main id="contenu">
+
+  <!-- ================= CHIFFRES ================= -->
+  <div class="kpiband">
+    <div class="kpi"><div class="v" data-cible="27">0</div><div class="l">variables territoriales</div></div>
+    <div class="kpi"><div class="v" data-cible="34733">0</div><div class="l">communes couvertes</div></div>
+    <div class="kpi"><div class="v" data-cible="8">0</div><div class="l">années · 2017 à 2024</div></div>
+    <div class="kpi"><div class="v" data-cible="7">0</div><div class="l">familles d'indicateurs</div></div>
+  </div>
+
+  <!-- ================= CARROUSEL : CE QUE PERMET L'ATLAS =================
+       Tout le contenu est dans le HTML ; le JS ne fait que piloter l'affichage. -->
+  <section class="section sur-fond-clair carou-sec" aria-labelledby="carou-titre">
+    <span class="kicker">Dans l'application</span>
+    <h2 id="carou-titre">Ce que permet l'atlas</h2>
+    <span class="barre" aria-hidden="true"></span>
+
+    <div class="carou" id="carou" role="region" aria-roledescription="carrousel" aria-label="Fonctions de l'atlas" tabindex="-1">
+      <div class="carou-piste" id="carou-piste">
+        <article class="diapo" role="group" aria-roledescription="diapositive" aria-label="1 sur 4">
+          <!-- carte : la silhouette de la France du hero, recolorée en 5 classes (cf. script) -->
+          <div class="visuel" id="ill-carte" aria-hidden="true"></div>
+          <div class="texte">
+            <div class="num"><b>01</b> / 04 · CARTE</div>
+            <h3>Une carte communale interactive</h3>
+            <p>Chaque variable se cartographie à l'échelle de la commune, année par année, avec le choix
+              de la classification et des filtres pour isoler un territoire ou une tranche de valeurs.</p>
+            <div class="tags"><span>34 733 communes</span><span>2017 → 2024</span><span>MapLibre GL</span></div>
+          </div>
+        </article>
+        <article class="diapo" role="group" aria-roledescription="diapositive" aria-label="2 sur 4">
+          <div class="visuel" aria-hidden="true">
+            <svg viewBox="0 0 400 300">
+              <!-- panneau -->
+              <rect x="6" y="6" width="388" height="288" rx="18" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.18)"/>
+              <text x="26" y="36" class="ill-txt b">Tableau de bord</text>
+              <text x="374" y="36" class="ill-txt m" text-anchor="end">2024 ▾</text>
+              <!-- 4 tuiles -->
+              <g>
+                <rect x="24" y="52" width="80" height="58" rx="10" fill="rgba(255,255,255,.07)"/>
+                <rect x="114" y="52" width="80" height="58" rx="10" fill="rgba(255,255,255,.07)"/>
+                <rect x="204" y="52" width="80" height="58" rx="10" fill="rgba(255,255,255,.07)"/>
+                <rect x="294" y="52" width="80" height="58" rx="10" fill="rgba(255,255,255,.07)"/>
+                <text x="34" y="72" class="ill-txt">MÉDIANE</text><rect x="34" y="84" width="46" height="12" rx="3" fill="#8ff0d4"/>
+                <text x="124" y="72" class="ill-txt">MOYENNE</text><rect x="124" y="84" width="52" height="12" rx="3" fill="#7fb2ff"/>
+                <text x="214" y="72" class="ill-txt">MIN</text><rect x="214" y="84" width="22" height="12" rx="3" fill="rgba(255,255,255,.55)"/>
+                <text x="304" y="72" class="ill-txt">MAX</text><rect x="304" y="84" width="58" height="12" rx="3" fill="#ff7eb3"/>
+              </g>
+              <!-- frise 2017-2024 -->
+              <text x="26" y="138" class="ill-txt">Évolution de la médiane</text>
+              <g stroke="rgba(255,255,255,.12)"><line x1="26" y1="160" x2="230" y2="160"/><line x1="26" y1="190" x2="230" y2="190"/><line x1="26" y1="220" x2="230" y2="220"/></g>
+              <polyline points="30,206 58,198 86,201 114,186 142,180 170,171 198,166 226,154" fill="none" stroke="#8ff0d4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <g fill="#041a18" stroke="#8ff0d4" stroke-width="2"><circle cx="30" cy="206" r="3.5"/><circle cx="114" cy="186" r="3.5"/><circle cx="226" cy="154" r="4.5" fill="#8ff0d4"/></g>
+              <text x="30" y="242" class="ill-txt">2017</text><text x="226" y="242" class="ill-txt" text-anchor="end">2024</text>
+              <!-- comparaison 2 régions -->
+              <text x="256" y="138" class="ill-txt">Comparaison</text>
+              <rect x="256" y="152" width="118" height="80" rx="10" fill="rgba(255,255,255,.05)"/>
+              <rect x="276" y="186" width="30" height="38" rx="4" fill="#7fb2ff"/>
+              <rect x="324" y="166" width="30" height="58" rx="4" fill="#ff7eb3"/>
+              <text x="291" y="268" class="ill-txt" text-anchor="middle">Rég. A</text>
+              <text x="339" y="268" class="ill-txt" text-anchor="middle">Rég. B</text>
+            </svg>
+          </div>
+          <div class="texte">
+            <div class="num"><b>02</b> / 04 · TABLEAU DE BORD</div>
+            <h3>Un tableau de bord pour comparer</h3>
+            <p>À côté de la carte : médiane, moyenne, minimum et maximum de la variable affichée, leur
+              évolution année par année, et un mode de comparaison entre deux régions.</p>
+            <div class="tags"><span>médiane · min · max</span><span>frise 2017-2024</span><span>2 régions</span></div>
+          </div>
+        </article>
+        <article class="diapo" role="group" aria-roledescription="diapositive" aria-label="3 sur 4">
+          <div class="visuel" aria-hidden="true">
+            <svg viewBox="0 0 400 300">
+              <rect x="40" y="6" width="320" height="288" rx="20" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.18)"/>
+              <!-- en-tête -->
+              <circle cx="70" cy="36" r="13" fill="rgba(143,240,212,.18)" stroke="#8ff0d4"/>
+              <circle cx="65.5" cy="34" r="1.6" fill="#8ff0d4"/><circle cx="74.5" cy="34" r="1.6" fill="#8ff0d4"/>
+              <path d="M65 39.5c2.6 2 7.4 2 10 0" stroke="#8ff0d4" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+              <text x="92" y="34" class="ill-txt b">Assistant EEPATHO</text>
+              <circle cx="95" cy="46" r="3" fill="#8ff0d4"/><text x="103" y="49" class="ill-txt">en ligne</text>
+              <line x1="40" y1="64" x2="360" y2="64" stroke="rgba(255,255,255,.14)"/>
+              <!-- question -->
+              <rect x="150" y="80" width="192" height="40" rx="14" fill="#1f6feb"/>
+              <text x="164" y="105" class="ill-ui">Nitrates dans l'eau à Lyon ?</text>
+              <!-- réponse -->
+              <rect x="58" y="134" width="236" height="76" rx="14" fill="rgba(255,255,255,.1)"/>
+              <text x="72" y="156" class="ill-ui">Variable trouvée :</text>
+              <rect x="72" y="166" width="200" height="22" rx="11" fill="rgba(143,240,212,.12)" stroke="rgba(143,240,212,.4)"/>
+              <text x="84" y="181" class="ill-txt m">Nitrates — moyenne (mg/L)</text>
+              <text x="72" y="202" class="ill-ui">Commune : Lyon (69123)</text>
+              <!-- saisie -->
+              <rect x="58" y="244" width="284" height="34" rx="17" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.2)"/>
+              <text x="76" y="265" class="ill-txt">Posez votre question…</text>
+              <circle cx="324" cy="261" r="12" fill="#8ff0d4"/>
+              <path d="M319 261h9m-4-4l4 4-4 4" stroke="#041a18" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="texte">
+            <div class="num"><b>03</b> / 04 · ASSISTANT</div>
+            <h3>Un assistant de recherche</h3>
+            <p>Posez votre question en langage courant : l'assistant vous oriente dans le catalogue des
+              variables et retrouve les communes par leur nom — y compris hors ligne.</p>
+            <div class="tags"><span>langage courant</span><span>communes</span><span>hors ligne</span></div>
+          </div>
+        </article>
+        <article class="diapo" role="group" aria-roledescription="diapositive" aria-label="4 sur 4">
+          <div class="visuel" aria-hidden="true">
+            <svg viewBox="0 0 400 300">
+              <!-- fiche méthodo -->
+              <rect x="20" y="10" width="220" height="280" rx="16" fill="rgba(255,255,255,.07)" stroke="rgba(255,255,255,.2)"/>
+              <rect x="20" y="10" width="220" height="44" rx="16" fill="rgba(143,240,212,.12)"/>
+              <text x="38" y="38" class="ill-txt b">Fiche méthodo</text>
+              <text x="38" y="80" class="ill-txt m">SOURCE</text>
+              <rect x="38" y="88" width="170" height="7" rx="3.5" fill="rgba(255,255,255,.28)"/>
+              <rect x="38" y="100" width="128" height="7" rx="3.5" fill="rgba(255,255,255,.18)"/>
+              <text x="38" y="134" class="ill-txt m">MILLÉSIMES</text>
+              <g fill="rgba(143,240,212,.16)" stroke="rgba(143,240,212,.45)">
+                <rect x="38" y="142" width="38" height="18" rx="9"/><rect x="82" y="142" width="38" height="18" rx="9"/><rect x="126" y="142" width="38" height="18" rx="9"/><rect x="170" y="142" width="38" height="18" rx="9"/>
+              </g>
+              <text x="38" y="190" class="ill-txt m">LIMITES CONNUES</text>
+              <rect x="38" y="198" width="176" height="7" rx="3.5" fill="rgba(255,255,255,.28)"/>
+              <rect x="38" y="210" width="150" height="7" rx="3.5" fill="rgba(255,255,255,.18)"/>
+              <rect x="38" y="222" width="164" height="7" rx="3.5" fill="rgba(255,255,255,.18)"/>
+              <rect x="38" y="244" width="160" height="26" rx="8" fill="rgba(255,126,179,.14)" stroke="rgba(255,126,179,.5)"/>
+              <text x="50" y="261" class="ill-txt" style="fill:#ffc2d9">secret statistique &lt;10</text>
+              <!-- export de la carte -->
+              <rect x="226" y="70" width="160" height="150" rx="14" fill="#0b3a33" stroke="rgba(255,255,255,.3)"/>
+              <rect x="238" y="82" width="136" height="98" rx="8" fill="rgba(255,255,255,.06)"/>
+              <path d="M282 98l18-6 22 10 14-4 6 18-8 22 6 20-22 10-20-4-14-14 4-18-10-12z" fill="rgba(127,178,255,.35)" stroke="#dcf0ff" stroke-width="1.4"/>
+              <g><rect x="244" y="188" width="14" height="6" rx="2" fill="#8ff0d4"/><rect x="262" y="188" width="14" height="6" rx="2" fill="#7fb2ff"/><rect x="280" y="188" width="14" height="6" rx="2" fill="#ff7eb3"/></g>
+              <text x="244" y="210" class="ill-txt">légende incluse</text>
+              <circle cx="372" cy="224" r="22" fill="#8ff0d4"/>
+              <path d="M372 212v18m-7-7l7 7 7-7M362 236h20" stroke="#041a18" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <text x="306" y="268" class="ill-txt b" text-anchor="middle">Export PNG</text>
+            </svg>
+          </div>
+          <div class="texte">
+            <div class="num"><b>04</b> / 04 · MÉTHODE</div>
+            <h3>Des fiches méthodo et l'export</h3>
+            <p>Chaque variable a sa fiche — source, millésimes, limites connues, secret statistique — et la
+              carte complète s'exporte en image, légende comprise.</p>
+            <div class="tags"><span>sources</span><span>limites</span><span>export image</span></div>
+          </div>
+        </article>
+      </div>
+
+      <div class="carou-cmd">
+        <div class="points" id="carou-points"></div>
+        <button class="fl" id="carou-pause" type="button" aria-label="Mettre en pause la rotation">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+        </button>
+        <button class="fl" id="carou-prec" type="button" aria-label="Diapositive précédente">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <button class="fl" id="carou-suiv" type="button" aria-label="Diapositive suivante">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+      <div class="saut" aria-live="polite" id="carou-annonce"></div>
+    </div>
+  </section>
+
+  <!-- ================= FAMILLES ================= -->
+  <section class="section sur-fond-clair" id="familles">
+    <span class="kicker">Catalogue interrogeable</span>
+    <h2>Les indicateurs de l'atlas</h2>
+    <span class="barre" aria-hidden="true"></span>
+    <div class="sub">Chaque variable est documentée (source, millésimes, limites) et interrogeable
+      dans l'application — carte, tableau de bord et assistant de recherche.</div>
+    <div class="grid" id="groupes"></div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <span class="sep" aria-hidden="true"></span>
+  <div class="foot-in">
+    <div class="foot-brand"><span class="pt" aria-hidden="true"></span>EEPATHO <span>Atlas Géo-Santé</span></div>
+    <div class="foot-meta">Cartographie MapLibre GL JS · fonctionne intégralement en local ·<br>
+      clé pivot code INSEE (Corse 2A/2B et zéros de tête préservés).</div>
+  </div>
+</footer>
+
+<script src="points_france.js"></script>
+<script>
+/* Préférence de mouvement : lue une fois, partagée par tous les modules. */
+const REDUIT = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ================== AMBIANCE LATÉRALE ==================
+   Fondu enchaîné entre les images d'ambiance, dans les marges des grands
+   écrans. Opacité seule. En pause quand l'onglet passe en arrière-plan :
+   inutile de faire tourner un minuteur sur une page que personne ne voit. */
+(function(){
+  const IMAGES = [
+    "LOGO_ACCEUIL_OPT/medecin_foie.jpg",  // médecin + foie holographique
+    "LOGO_ACCEUIL_OPT/tech_sante.jpg",    // foie « TECH + HEALTH »
+    "LOGO_ACCEUIL_OPT/medecin_tech.jpg"   // médecin low-poly
+  ];
+  const cotes = document.querySelectorAll(".ambiance .cote");
+  if(!cotes.length) return;
+  cotes.forEach(cote=>{
+    IMAGES.forEach(url=>{
+      const d=document.createElement("div");
+      d.className="vue";
+      d.style.backgroundImage="url('"+url+"')";
+      cote.appendChild(d);
+    });
+  });
+  // départ décalé gauche/droite : jamais la même image des deux côtés
+  const etat=[...cotes].map((cote,i)=>({vues:cote.querySelectorAll(".vue"), idx:i%IMAGES.length}));
+  const activer=()=>etat.forEach(s=>s.vues.forEach((el,i)=>el.classList.toggle("on", i===s.idx)));
+  activer();
+  if(REDUIT || IMAGES.length<2) return;      // 1re image figée
+
+  let timer=null;
+  const avancer=()=>{
+    etat.forEach(s=>{ s.idx=(s.idx+1)%IMAGES.length; });
+    if(etat.length===2 && etat[0].idx===etat[1].idx) etat[1].idx=(etat[1].idx+1)%IMAGES.length;
+    activer();
+  };
+  const demarrer=()=>{ if(!timer) timer=setInterval(avancer, 7000); };
+  const arreter =()=>{ if(timer){ clearInterval(timer); timer=null; } };
+  document.addEventListener("visibilitychange",()=> document.hidden ? arreter() : demarrer());
+  demarrer();
+})();
+
+/* ================== FRANCE : vrai contour + points ==================
+   Contour réel de la France métropolitaine (source GeoJSON IGN/OSM), projeté et calé
+   sur les centroïdes communaux du projet, lissé (Chaikin) pour une ligne fine et nette.
+   Les 345 points viennent de points_france.js : ce sont de vrais centroïdes. */
+(function(){
+  const NS="http://www.w3.org/2000/svg";
+  const svg=document.getElementById("france");
+
+  const D_CONT="M515.0 222.7L510.5 224.6L508.2 228.3L508.2 231.2L511.3 232.2L511.9 233.4L508.7 238.9L498.0 249.8L489.4 256.0L487.9 258.0L486.7 264.9L485.0 267.5L473.5 278.6L471.5 285.4L474.0 290.3L468.8 300.8L469.5 301.8L471.7 301.7L479.5 298.0L479.6 293.2L482.2 290.8L495.1 288.9L499.3 289.1L504.2 290.9L505.1 296.2L503.9 303.0L506.5 304.3L507.0 308.3L511.7 314.9L510.0 317.8L504.4 321.9L503.6 325.0L505.0 328.0L510.2 332.0L512.3 339.1L516.8 343.9L518.5 347.8L517.0 353.0L514.9 355.4L499.5 362.9L497.7 365.1L497.5 367.6L502.8 374.9L510.7 379.0L513.7 382.5L514.0 387.1L509.6 389.3L506.7 395.7L507.9 402.5L511.8 410.2L517.9 415.4L525.4 418.1L539.1 417.3L542.2 418.7L542.1 422.2L535.4 431.7L533.6 437.8L519.5 446.3L516.3 451.4L511.3 452.3L504.9 458.6L501.1 459.4L498.0 461.7L494.9 466.3L497.8 468.2L496.0 471.8L485.4 474.6L483.7 476.6L478.0 476.2L474.4 479.3L465.4 476.1L464.7 478.3L461.2 478.7L454.6 473.3L440.0 468.8L437.6 463.7L436.0 462.9L425.7 462.5L418.5 458.1L417.4 460.3L419.9 461.1L419.1 462.6L412.7 463.1L402.2 457.4L391.3 456.0L383.9 453.1L381.1 453.2L372.8 457.2L358.8 466.3L350.9 468.8L344.6 473.9L341.5 480.6L339.4 490.4L339.5 499.9L342.1 507.7L342.3 511.8L331.9 512.4L319.2 516.9L315.4 517.2L303.3 514.4L294.0 516.7L289.1 512.2L283.2 510.0L279.8 503.3L273.0 501.8L269.0 503.1L263.9 498.1L257.2 497.5L240.5 491.9L237.8 492.0L236.2 493.3L234.6 497.3L232.7 498.3L222.0 498.0L219.0 499.4L214.0 497.5L206.0 498.4L191.0 491.7L182.7 492.8L178.1 490.3L173.5 485.7L166.6 483.0L153.3 480.4L149.5 477.9L149.9 476.3L147.2 479.5L144.4 479.9L143.6 477.3L144.4 472.1L142.3 468.0L129.4 463.9L129.4 460.8L134.7 457.9L138.4 453.6L141.9 445.1L152.0 392.7L153.8 390.0L160.1 388.8L160.2 388.0L156.0 384.0L153.4 385.2L152.3 387.2L151.8 385.8L155.0 350.6L158.1 339.6L160.7 336.5L160.2 334.8L154.4 329.0L154.0 326.3L158.4 313.3L156.8 305.9L152.9 302.1L155.4 294.9L145.6 292.3L135.2 287.0L121.3 275.3L117.7 270.5L114.6 262.1L117.3 252.8L116.8 250.4L110.1 245.3L109.1 243.5L109.4 238.0L104.9 236.0L97.7 235.1L94.5 233.3L95.2 230.0L98.5 227.9L97.4 223.9L98.9 222.9L92.7 222.2L91.3 221.0L91.5 219.6L88.1 222.9L82.5 222.6L79.9 220.1L86.3 219.0L87.5 215.7L79.5 217.0L76.7 214.4L77.1 217.9L70.9 217.7L69.2 219.5L68.9 222.1L66.5 215.6L68.1 209.3L65.7 212.6L63.1 213.0L60.6 211.9L61.8 211.0L59.8 209.9L61.9 205.8L59.6 206.9L58.3 204.2L58.4 208.7L55.7 209.9L51.4 202.6L50.7 205.4L42.7 202.6L41.5 204.6L39.3 205.0L36.8 203.8L32.5 199.0L31.2 201.0L27.8 200.5L26.0 195.6L21.8 203.9L17.9 204.7L16.1 203.8L10.1 192.9L5.7 190.1L2.0 189.9L16.9 186.5L18.4 185.6L18.4 183.5L12.2 179.2L6.6 180.7L4.6 175.2L7.5 172.6L7.8 173.9L11.3 175.3L24.2 176.6L20.7 175.8L21.5 174.4L18.0 173.5L18.5 171.3L13.3 171.8L16.6 167.2L0.4 171.0L-2.3 169.2L-2.6 165.8L0.2 159.6L3.6 158.3L7.7 158.8L5.8 157.4L9.0 157.3L8.5 155.1L12.3 152.9L23.0 150.2L31.0 149.7L32.7 150.7L33.3 153.8L34.5 152.2L37.1 154.3L39.4 150.1L48.0 150.2L49.7 149.3L53.5 142.3L58.6 142.6L63.6 140.4L64.6 140.6L65.6 143.3L70.8 140.4L70.5 144.9L72.6 143.8L74.4 144.4L83.4 155.0L87.1 158.0L90.8 159.0L94.7 158.0L104.4 152.1L104.2 153.8L107.1 153.7L109.4 156.5L113.8 155.1L116.4 155.5L118.7 161.0L119.9 157.9L118.2 152.5L120.8 150.2L123.8 149.3L124.9 149.9L125.2 153.7L127.0 154.9L135.5 155.1L142.9 153.9L143.9 152.8L143.3 151.4L137.5 146.5L136.1 143.6L139.1 130.6L136.9 128.5L136.9 121.8L135.3 116.5L128.5 108.6L124.7 99.9L123.0 90.5L124.1 88.4L126.4 88.0L137.3 90.3L149.9 89.3L151.2 90.1L151.7 92.8L150.1 96.1L150.4 99.6L153.5 104.9L157.4 108.1L171.1 108.0L196.2 111.1L209.1 109.6L213.8 107.5L217.4 104.0L211.4 99.7L210.7 97.5L212.6 91.6L216.5 88.2L231.1 80.8L251.0 72.9L263.9 65.0L273.7 56.6L277.9 56.6L273.4 49.2L274.5 46.4L276.7 46.3L274.7 43.6L274.3 40.4L275.6 35.8L277.6 36.1L275.5 32.1L274.9 25.3L274.9 20.6L277.6 16.1L282.9 11.9L290.8 8.1L309.4 2.9L314.9 3.1L318.0 5.1L320.9 15.3L328.2 22.6L332.6 24.0L341.9 20.1L345.4 20.7L347.6 23.9L350.3 33.5L354.8 36.2L361.2 37.8L363.5 39.5L368.0 47.1L373.2 48.3L381.8 47.5L386.9 52.0L388.6 51.9L387.3 60.5L389.7 64.6L387.6 67.2L388.3 70.1L397.4 70.7L409.6 68.2L413.1 61.5L417.9 58.9L418.8 62.0L416.3 70.8L418.6 74.3L419.3 80.9L433.3 87.6L443.9 97.7L446.7 98.8L459.5 97.9L470.8 102.3L477.8 100.4L483.5 101.2L489.8 104.5L492.5 107.3L497.1 114.9L501.3 119.4L509.0 119.0L514.2 123.4L516.3 122.3L525.3 123.2L530.5 121.2L541.4 127.4L550.9 128.1L560.5 130.9L561.8 133.1L561.3 136.3L547.3 158.1L539.2 179.8L537.7 188.6L537.9 196.7L535.2 208.1L536.2 217.3L535.5 219.3L531.9 223.5L526.3 227.0L523.3 227.0L515.0 222.7Z";
+  const D_CORSE="M616.4 549.1L615.2 556.1L612.4 558.9L614.2 559.9L610.1 565.0L609.1 567.7L610.0 569.1L609.4 570.5L605.4 570.6L603.6 569.3L601.4 565.6L593.4 563.3L589.8 559.3L590.4 557.5L593.7 554.3L588.4 552.2L586.1 549.8L589.7 542.0L587.3 541.2L583.1 542.2L581.7 541.4L581.9 539.4L585.5 536.0L586.1 533.6L580.2 528.5L579.3 526.0L580.3 524.1L584.1 522.4L580.5 516.8L584.3 512.8L586.9 506.2L589.5 506.0L590.9 504.4L598.3 502.0L604.2 498.0L611.4 497.8L613.3 493.0L614.6 483.3L616.2 481.8L619.8 498.3L622.0 519.0L621.0 533.2L616.4 549.1Z";
+
+  function faire(d,cls){const p=document.createElementNS(NS,"path");p.setAttribute("d",d);p.setAttribute("class",cls);p.setAttribute("pathLength","1");return p;}
+
+  /* 1) remplissage très léger (le foie reste visible en fond) */
+  svg.appendChild(faire(D_CONT,"frfill"));
+  svg.appendChild(faire(D_CORSE,"frfill"));
+
+  /* 2) points des communes témoins — apparition en cascade */
+  const frag=document.createDocumentFragment();
+  PTS.forEach((p,i)=>{
+    const c=document.createElementNS(NS,"circle");
+    c.setAttribute("cx",p[0]); c.setAttribute("cy",p[1]);
+    c.setAttribute("r", 2.6 + (i%5===0?1.6:0));
+    let cls="pt";
+    if(i%17===0) cls+=" s";
+    else if(i%3===0) cls+=" m";
+    c.setAttribute("class",cls);
+    /* transform-box/origin : sans eux, le scale de l'apparition se ferait
+       depuis l'origine du SVG et les points partiraient du coin. */
+    c.style.transformBox="fill-box";
+    c.style.transformOrigin="center";
+    c.style.animationDelay=(i*7)+"ms, "+(900+(i%20)*180)+"ms";
+    frag.appendChild(c);
+  });
+  svg.appendChild(frag);
+
+  /* 3) contour fin lumineux par-dessus (tracé animé à l'ouverture) */
+  svg.appendChild(faire(D_CONT,"frbord"));
+  svg.appendChild(faire(D_CORSE,"frbord"));
+})();
+
+/* ================== FAMILLES (images : ajuster DOSSIER_IMG si besoin) ================== */
+const DOSSIER_IMG = "LOGO_ACCEUIL_OPT/";   /* versions compressées (~0,7 Mo au lieu de ~19 Mo) — originaux dans LOGO_ACCEUIL */
+const GROUPES_ACCUEIL = [
+  ["Population","#1f6feb","POPULUATIONS.jpg",
+    ["Population municipale","Densité (hab/km²)","Type urbain/rural","Population 20 ans et plus","Hommes de 20 ans et plus","Femmes de 20 ans et plus","Part d'hommes chez les 20 ans et plus (%)"]],
+  ["Contexte social","#b8336a","CONTEX SOCIAL.jpg",
+    ["Revenu médian par UC (€)","Indice de défavorisation FDep","Quintile FDep (1→5)","Nb immigrés","Part d'immigrés (%)"]],
+  ["Accès aux soins","#0e8a6d","ACCES_SOINS.jpg",
+    ["APL médecins généralistes","Distance au CHU / CLCC le plus proche"]],
+  ["Eau potable","#0d7fb8","EAU_POTABLE.jpg",
+    ["Nitrates — moyenne (mg/L)","Nitrates — maximum (mg/L)","Arsenic — moyenne (µg/L)","Arsenic — maximum (µg/L)","Pesticides totaux — moyenne (µg/L)","Pesticides totaux — maximum (µg/L)","Chlorure de vinyle — maximum (µg/L)"]],
+  ["Pollution de l'air","#8250df","POLUTION.jpg",
+    ["Particules fines PM2,5 (µg/m³)","Particules PM10 (µg/m³)","NO₂ — moyenne annuelle (µg/m³)","Ozone O₃ — moyenne annuelle (µg/m³)"]],
+  ["Typologies","#d97706","TYPOLOGIE.jpg",
+    ["Typologie Geoclash","Grille de densité (7 niveaux)"]],
+  ["Radon","#c026d3","RADIOACTIVITE.jpg",
+    ["Potentiel radon (catégorie)"]]
+];
+(function(){
+  const cont=document.getElementById("groupes");
+  /* hex -> "r,g,b" : permet des rgba() dérivés de la couleur de famille sans
+     color-mix(), que les navigateurs plus anciens du parc hospitalier ignorent. */
+  const enRgb=(hex)=>{
+    const h=hex.replace("#","");
+    return [0,2,4].map(i=>parseInt(h.slice(i,i+2),16)).join(",");
+  };
+  GROUPES_ACCUEIL.forEach(([titre,couleur,img,vars])=>{
+    const d=document.createElement("div"); d.className="grp";
+    d.style.setProperty("--c",couleur);                 /* couleur de famille : halo, liseré, puces */
+    d.style.setProperty("--c-rgb",enRgb(couleur));      /* même couleur, en composantes */
+    d.innerHTML =
+      `<div class="bgimg" data-img="${DOSSIER_IMG}${img}"></div>`+
+      `<div class="voile"></div>`+
+      `<div class="liseret" style="background:${couleur}"></div>`+
+      `<div class="contenu">
+        <h3><span class="ic" style="background:${couleur}"></span>${titre}</h3>
+        <div class="n">${vars.length} variable${vars.length>1?"s":""}</div>
+        <div class="chips">${vars.map((v,i)=>`<span class="chip" style="transition-delay:${60+i*40}ms">${v}</span>`).join("")}</div>
+      </div>`;
+    cont.appendChild(d);
+  });
+  const cartes=[...document.querySelectorAll(".grid .grp")];
+  /* apparition anticipée (rootMargin) = ressenti plus rapide ; cascade par colonne.
+     L'image de fond n'est téléchargée qu'à l'approche de la carte. */
+  const io=new IntersectionObserver(es=>es.forEach(e=>{
+    if(e.isIntersecting){
+      const g=e.target, idx=cartes.indexOf(g);
+      const bg=g.querySelector(".bgimg");
+      if(bg&&bg.dataset.img){ bg.style.backgroundImage="url('"+bg.dataset.img+"')"; }
+      g.style.transitionDelay=((idx%3)*80)+"ms";        /* léger décalage gauche→droite */
+      g.classList.add("in"); io.unobserve(g);
+    }
+  }),{threshold:.05, rootMargin:"0px 0px 160px 0px"});
+  cartes.forEach(g=>io.observe(g));
+})();
+
+/* ================== APPARITION AU DÉFILEMENT (chiffres, titre de section) ================== */
+(function(){
+  const cibles=[...document.querySelectorAll(".kpi, .section")];
+  if(!cibles.length) return;
+  const io=new IntersectionObserver(es=>es.forEach(e=>{
+    if(!e.isIntersecting) return;
+    const el=e.target;
+    if(el.classList.contains("kpi")){
+      /* cascade gauche → droite sur le bandeau */
+      const idx=[...document.querySelectorAll(".kpi")].indexOf(el);
+      el.style.transitionDelay=(idx*70)+"ms";
+    }
+    el.classList.add("in"); io.unobserve(el);
+  }),{threshold:.2, rootMargin:"0px 0px -40px 0px"});
+  cibles.forEach(el=>io.observe(el));
+})();
+
+/* ================== LOGOS : INCLINAISON 3D QUI SUIT LE POINTEUR ==================
+   Une écriture de variables CSS par image (requestAnimationFrame) ; la
+   transition CSS lisse le mouvement. Souris uniquement, rien si mouvement réduit. */
+(function(){
+  if(REDUIT || !window.matchMedia("(pointer:fine)").matches) return;
+  document.querySelectorAll(".partners img").forEach(img=>{
+    let rq=0, ev=null;
+    const poser=()=>{ rq=0; const r=img.getBoundingClientRect();
+      const x=(ev.clientX-r.left)/r.width-.5, y=(ev.clientY-r.top)/r.height-.5;
+      img.style.setProperty("--ry",(x*16).toFixed(1)+"deg");
+      img.style.setProperty("--rx",(-y*16).toFixed(1)+"deg"); };
+    img.addEventListener("pointermove",e=>{ ev=e; if(!rq) rq=requestAnimationFrame(poser); },{passive:true});
+    img.addEventListener("pointerleave",()=>{ if(rq){cancelAnimationFrame(rq);rq=0;}
+      img.style.setProperty("--rx","0deg"); img.style.setProperty("--ry","0deg"); },{passive:true});
+  });
+})();
+
+/* ================== CARROUSEL ================== */
+(function(){
+  const racine=document.getElementById("carou");
+  const piste=document.getElementById("carou-piste");
+  if(!racine||!piste) return;
+  const diapos=[...piste.querySelectorAll(".diapo")];
+  const zonePts=document.getElementById("carou-points");
+  const btnPause=document.getElementById("carou-pause");
+  const annonce=document.getElementById("carou-annonce");
+  const DUREE=2500, N=diapos.length;
+  let idx=0, timer=null, visible=false, focusDedans=false, arretUtilisateur=REDUIT;
+
+  /* points (boutons ≥ 44 px) */
+  const pts=diapos.map((d,i)=>{
+    const b=document.createElement("button"); b.type="button";
+    b.setAttribute("aria-label","Aller à la diapositive "+(i+1)+" sur "+N);
+    b.innerHTML="<i></i>"; b.addEventListener("click",()=>aller(i,true));
+    zonePts.appendChild(b); return b;
+  });
+
+  /* Diapositive « carte » : on clone la France en points du hero et on la recolore
+     en 5 classes, comme une choroplèthe de l'atlas. Valeurs purement illustratives
+     (dégradé spatial lissé), pas de vraie donnée. */
+  (function(){
+    const cible=document.getElementById("ill-carte"), src=document.getElementById("france");
+    if(!cible||!src) return;
+    const NS="http://www.w3.org/2000/svg";
+    const svg=src.cloneNode(true);
+    svg.removeAttribute("id"); svg.removeAttribute("role"); svg.removeAttribute("aria-label");
+    svg.setAttribute("viewBox","-10 -10 640 650");
+    const PAL=["#2b4a8f","#2f7fb3","#2aa59a","#8ff0d4","#ff7eb3"];
+    const cercles=[...svg.querySelectorAll("circle")];
+    const val=c=>{ const x=+c.getAttribute("cx"), y=+c.getAttribute("cy");
+      return Math.sin(x*.012)+Math.cos(y*.016)+Math.sin((x+y)*.006); };
+    const tri=cercles.map(val).sort((a,b)=>a-b);
+    const seuils=[1,2,3,4].map(k=>tri[Math.floor(tri.length*k/5)]);
+    cercles.forEach(c=>{
+      const v=val(c); let k=0; while(k<4 && v>=seuils[k]) k++;
+      c.setAttribute("class","");             // retire les animations du hero
+      c.setAttribute("fill",PAL[k]);
+      c.setAttribute("r",(+c.getAttribute("r")*1.9).toFixed(1));
+      c.removeAttribute("style");
+    });
+    svg.querySelectorAll(".frbord").forEach(p=>{ p.setAttribute("class","");
+      p.setAttribute("fill","none"); p.setAttribute("stroke","rgba(220,240,255,.75)"); p.setAttribute("stroke-width","2"); });
+    svg.querySelectorAll(".frfill").forEach(p=>{ p.setAttribute("class",""); p.setAttribute("fill","rgba(150,190,245,.08)"); });
+    /* légende en 5 classes */
+    const lg=document.createElementNS(NS,"g");
+    lg.innerHTML='<text x="4" y="572" class="ill-txt" style="font-size:17px">classes (quantiles)</text>'+
+      PAL.map((c,i)=>'<rect x="'+(4+i*42)+'" y="586" width="38" height="14" rx="4" fill="'+c+'"/>').join("")+
+      '<text x="4" y="626" class="ill-txt" style="font-size:15px">faible</text>'+
+      '<text x="210" y="626" class="ill-txt" style="font-size:15px" text-anchor="end">élevé</text>';
+    svg.appendChild(lg);
+    cible.appendChild(svg);
+  })();
+
+  /* images chargées seulement à l'approche de la section */
+  const charger=()=>diapos.forEach(d=>{const v=d.querySelector(".visuel");
+    if(v&&v.dataset.img){ v.style.backgroundImage="url('"+v.dataset.img+"')"; delete v.dataset.img; }});
+
+  function marquer(i,annoncer){
+    idx=i;
+    diapos.forEach((d,k)=>{ d.classList.toggle("active",k===i); d.setAttribute("aria-hidden",k===i?"false":"true");
+      d.querySelectorAll("a,button").forEach(el=>el.tabIndex=(k===i?0:-1)); });
+    pts.forEach((b,k)=>b.setAttribute("aria-current",k===i?"true":"false"));
+    if(annoncer) annonce.textContent="Diapositive "+(i+1)+" sur "+N+" : "+diapos[i].querySelector("h3").textContent;
+    relancer();
+  }
+  function aller(i,parUtilisateur){
+    i=(i+N)%N;
+    piste.scrollTo({left:diapos[i].offsetLeft-piste.offsetLeft, behavior:REDUIT?"auto":"smooth"});
+    marquer(i,parUtilisateur);
+  }
+
+  /* la diapositive réellement visible (glisser au doigt, trackpad) fait foi */
+  const ioD=new IntersectionObserver(es=>es.forEach(e=>{
+    /* isIntersecting reste vrai sous le seuil : on teste le ratio, sinon la diapo
+       qui SORT se re-déclarait active au milieu du glissement */
+    if(e.intersectionRatio>=.6){ const i=diapos.indexOf(e.target); if(i!==idx) marquer(i,false); }
+  }),{root:piste,threshold:.6});
+  diapos.forEach(d=>ioD.observe(d));
+
+  /* rotation douce : jamais si mouvement réduit, en pause dès que l'utilisateur interagit */
+  /* pas de pause au simple survol de la souris (le carrousel restait figé dès que
+     le pointeur était posé dessus) ; pause seulement au focus CLAVIER */
+  const tourne=()=>!arretUtilisateur && visible && !focusDedans && !document.hidden;
+  function relancer(){
+    clearTimeout(timer); timer=null;
+    racine.style.setProperty("--duree",DUREE+"ms");
+    racine.classList.toggle("rotation",!arretUtilisateur);
+    racine.classList.toggle("pause",!tourne());
+    /* on redémarre la jauge du point actif */
+    const i=pts[idx]&&pts[idx].querySelector("i"); if(i){ i.style.animation="none"; void i.offsetWidth; i.style.animation=""; }
+    if(tourne()) timer=setTimeout(()=>aller(idx+1,false),DUREE);
+  }
+
+  /* un clic de souris sur une flèche donne aussi le focus : on ne compte que le focus clavier */
+  racine.addEventListener("focusin",e=>{
+    let clavier=true; try{ clavier=e.target.matches(":focus-visible"); }catch(_){}
+    focusDedans=clavier; relancer();
+  });
+  racine.addEventListener("focusout",e=>{ if(!racine.contains(e.relatedTarget)){focusDedans=false;relancer();} });
+  document.addEventListener("visibilitychange",relancer);
+  racine.addEventListener("keydown",e=>{
+    if(e.key==="ArrowRight"){ e.preventDefault(); aller(idx+1,true); }
+    else if(e.key==="ArrowLeft"){ e.preventDefault(); aller(idx-1,true); }
+  });
+  document.getElementById("carou-prec").addEventListener("click",()=>aller(idx-1,true));
+  document.getElementById("carou-suiv").addEventListener("click",()=>aller(idx+1,true));
+
+  const majPause=()=>{
+    btnPause.setAttribute("aria-label",arretUtilisateur?"Relancer la rotation":"Mettre en pause la rotation");
+    btnPause.innerHTML=arretUtilisateur
+      ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+  };
+  btnPause.addEventListener("click",()=>{ arretUtilisateur=!arretUtilisateur; majPause(); relancer(); });
+  majPause();
+
+  new IntersectionObserver(([e])=>{
+    if(e.isIntersecting) charger();
+    visible=e.intersectionRatio>.35; relancer();
+  },{threshold:[0,.35],rootMargin:"200px 0px 0px 0px"}).observe(racine);
+
+  marquer(0,false);
+})();
+
+/* ================== COMPTEURS ================== */
+(function(){
+  const compte=(el)=>{
+    const cible=+el.dataset.cible;
+    if(REDUIT){ el.textContent=cible.toLocaleString("fr-FR"); return; }
+    const t0=performance.now(), dur=1100;
+    const tick=(t)=>{ const p=Math.min((t-t0)/dur,1);
+      el.textContent=Math.round(cible*(1-Math.pow(1-p,3))).toLocaleString("fr-FR");
+      if(p<1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  };
+  const io=new IntersectionObserver(es=>es.forEach(e=>{
+    if(e.isIntersecting){ compte(e.target); io.unobserve(e.target); }
+  }),{threshold:.4});
+  document.querySelectorAll(".kpi .v").forEach(v=>io.observe(v));
+})();
+
+/* ================== PARALLAXE + PLONGÉE 3D DANS LE FOIE ==================
+   Le foie et la carte glissent un peu plus lentement que la page (parallaxe),
+   et le foie lui-même « s'approche » en 3D pendant le défilement du hero
+   (rotation + zoom + profondeur), avec un très léger tangage au pointeur en
+   prime sur desktop (souris fine) — un relief, pas une vraie caméra 3D.
+   Quatre garde-fous : rien si l'utilisateur refuse le mouvement, rien sur
+   mobile, rien quand le hero est sorti du viewport (l'écouteur de scroll est
+   alors détaché), et une seule écriture de style par image via
+   requestAnimationFrame (les deux sources — scroll et pointeur — partagent
+   la même boucle). */
+(function(){
+  if(REDUIT) return;
+  const hero=document.querySelector(".hero");
+  const foie=document.querySelector(".foiewrap");
+  const foieImg=document.querySelector(".foiewrap .foie");
+  const carte=document.querySelector(".mapfig");
+  if(!hero||!foie||!foieImg||!carte) return;
+  if(!window.matchMedia("(min-width:981px)").matches) return;   /* pas d'effet sur mobile */
+
+  const finPointeur=window.matchMedia("(pointer:fine)").matches;
+  let heroH=hero.offsetHeight||900;
+  window.addEventListener("resize",()=>{ heroH=hero.offsetHeight||heroH; },{passive:true});
+
+  let px=0, py=0, attente=false, actif=false;
+
+  const placer=()=>{
+    const y=window.scrollY;
+    const p=Math.min(Math.max(y/heroH,0),1);   // 0 en haut du hero → 1 à sa sortie
+
+    foie.style.transform ="translate3d(0,"+(y*.14)+"px,0)";
+    carte.style.transform="translate3d(0,"+(y*-.05)+"px,0)";
+
+    const rotY=6*p  + px*4;
+    const rotX=-3*p - py*3;
+    foieImg.style.transform=
+      "translate(-50%,-50%) rotateX("+rotX.toFixed(2)+"deg) rotateY("+rotY.toFixed(2)+"deg) "+
+      "translateZ("+(120*p).toFixed(0)+"px) scale("+(1+.32*p).toFixed(3)+")";
+    foieImg.style.opacity=(.16+.16*p).toFixed(3);
+
+    attente=false;
+  };
+  const programmer=()=>{ if(!attente){ attente=true; requestAnimationFrame(placer); } };
+
+  if(finPointeur){
+    hero.addEventListener("pointermove",(e)=>{
+      const r=hero.getBoundingClientRect();
+      px=((e.clientX-r.left)/r.width -.5)*2;
+      py=((e.clientY-r.top )/r.height-.5)*2;
+      programmer();
+    },{passive:true});
+    hero.addEventListener("pointerleave",()=>{ px=0; py=0; programmer(); },{passive:true});
+  }
+
+  /* on n'écoute le scroll QUE tant que le hero est visible */
+  const io=new IntersectionObserver(([e])=>{
+    if(e.isIntersecting && !actif){
+      actif=true; window.addEventListener("scroll",programmer,{passive:true}); programmer();
+    }else if(!e.isIntersecting && actif){
+      actif=false; window.removeEventListener("scroll",programmer);
+    }
+  },{threshold:0});
+  io.observe(hero);
+})();
+
+/* ================== INTRO & DÉFILEMENT ANIMÉS (GSAP) ==================
+   Chargé dynamiquement depuis jsDelivr (version figée) APRÈS l'affichage :
+   si le CDN est lent ou bloqué, rien n'attend — ni la page, ni la connexion.
+   Uniquement des animations « une passe » (aucune boucle infinie ajoutée). */
+(function(){
+  const R=document.documentElement;
+  const liberer=()=>R.classList.remove("gs-attente");
+  if(REDUIT){ liberer(); return; }
+
+  const CDN="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/";
+  const charger=(f)=>new Promise((ok,ko)=>{
+    const s=document.createElement("script"); s.src=CDN+f; s.async=false;
+    s.onload=ok; s.onerror=ko; document.head.appendChild(s);
+  });
+  charger("gsap.min.js")
+    .then(()=>Promise.all(["ScrollTrigger.min.js","SplitText.min.js","ScrambleTextPlugin.min.js"].map(f=>charger(f).catch(()=>null))))
+    .then(()=>document.fonts ? document.fonts.ready : null)
+    .then(animer)
+    .catch(liberer);
+
+  function animer(){
+    const gsap=window.gsap; if(!gsap){ liberer(); return; }
+    const plug=[window.ScrollTrigger,window.SplitText,window.ScrambleTextPlugin].filter(Boolean);
+    if(plug.length) gsap.registerPlugin(...plug);
+    const ST=!!window.ScrollTrigger, SPLIT=!!window.SplitText, SCRAMBLE=!!window.ScrambleTextPlugin;
+
+    /* ---------- 1) Intro du hero (sautée si le filet des 2 s a déjà tout affiché) ---------- */
+    if(!window.__gsTrop){
+      const tl=gsap.timeline({defaults:{ease:"power3.out"}});
+
+      /* logos : la transition CSS de survol freinerait chaque image de GSAP → coupée pendant l'intro */
+      const logos=gsap.utils.toArray(".partners img");
+      logos.forEach(l=>l.style.transition="none");
+      tl.from(logos,{autoAlpha:0,y:28,scale:.82,rotateX:-35,transformPerspective:600,
+        duration:.8,stagger:.1,ease:"back.out(1.7)",
+        onComplete(){ gsap.set(logos,{clearProps:"all"}); logos.forEach(l=>l.style.transition=""); }});
+
+      tl.from(".eyebrow",{autoAlpha:0,x:-18,duration:.55},"-=.45");
+
+      /* titre : révélation par rideau (clip-path) — compatible avec son dégradé clippé au texte */
+      tl.fromTo("h1",
+        {clipPath:"inset(-15% 100% -15% 0)",autoAlpha:0,y:22,letterSpacing:".04em"},
+        {clipPath:"inset(-15% 0% -15% 0)",autoAlpha:1,y:0,letterSpacing:"-.035em",duration:1.15,ease:"expo.out",
+         clearProps:"clipPath,letterSpacing,transform"},"-=.3");
+
+      /* sous-titre : mots qui montent derrière un masque */
+      const sub=document.querySelector(".h1-sub");
+      if(SPLIT && sub){
+        sub.classList.add("gs-split");
+        const sp=SplitText.create(sub,{type:"words",mask:"words"});
+        tl.from(sp.words,{yPercent:110,duration:.75,stagger:.06,
+          onComplete(){ sp.revert(); sub.classList.remove("gs-split"); }},"-=.8");
+      }else{
+        tl.from(sub,{autoAlpha:0,y:14,duration:.6},"-=.8");
+      }
+
+      tl.from(".mission",{autoAlpha:0,y:18,duration:.7},"-=.45")
+        .fromTo(".mission",{borderLeftColor:"rgba(255,126,179,0)"},{borderLeftColor:"#ff7eb3",duration:.6},"<.2")
+        .from(".login",{autoAlpha:0,y:34,scale:.96,duration:.85,clearProps:"transform"},"-=.45")
+        .from(".maplegend",{autoAlpha:0,y:12,duration:.6},"-=.3");
+    }
+    liberer();   // les états de départ sont posés en ligne : on peut lever le masque
+
+    if(!ST) return;
+
+    /* ---------- 2) Section « indicateurs » : titre en mots + kicker brouillé ---------- */
+    document.querySelectorAll(".section h2").forEach(h2=>{
+      if(!SPLIT) return;
+      const sp=SplitText.create(h2,{type:"words",mask:"words"});
+      gsap.from(sp.words,{yPercent:105,duration:.8,stagger:.07,ease:"power4.out",
+        scrollTrigger:{trigger:h2,start:"top 88%",once:true},
+        onComplete(){ sp.revert(); }});
+    });
+    document.querySelectorAll(".section .kicker").forEach(kicker=>{
+      if(!SCRAMBLE) return;
+      gsap.to(kicker,{duration:1.2,ease:"none",
+        scrambleText:{text:kicker.textContent,chars:"0123456789·°%",speed:.6,revealDelay:.15},
+        scrollTrigger:{trigger:kicker,start:"top 90%",once:true}});
+    });
+
+    /* ---------- 3) Légère profondeur des images de familles au défilement ----------
+       On anime background-position et non transform : .bgimg garde son zoom de survol. */
+    if(window.matchMedia("(min-width:981px)").matches){
+      gsap.utils.toArray(".grp .bgimg").forEach(bg=>{
+        gsap.fromTo(bg,{backgroundPositionY:"38%"},{backgroundPositionY:"62%",ease:"none",
+          scrollTrigger:{trigger:bg.closest(".grp"),start:"top bottom",end:"bottom top",scrub:.6}});
+      });
+    }
+  }
+})();
+
+/* version publique : pas d'authentification (hébergement statique) */
+</script>
+</body>
+</html>
